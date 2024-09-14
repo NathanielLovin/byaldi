@@ -260,6 +260,7 @@ class ColPaliModel:
         metadata: Optional[List[Dict[str, Union[str, int]]]] = None,
         max_image_width: Optional[int] = None,
         max_image_height: Optional[int] = None,
+        save_on_each_update: bool = True,
     ) -> Dict[int, str]:
         if (
             self.index_name is not None
@@ -318,7 +319,7 @@ class ColPaliModel:
                 raise ValueError("For a single document, metadata should be a list with one dictionary")
             doc_id = doc_ids[0] if doc_ids else self.highest_doc_id + 1
             doc_metadata = metadata[0] if metadata else None
-            self.add_to_index(input_path, store_collection_with_index, doc_id=doc_id, metadata=doc_metadata)
+            self.add_to_index(input_path, store_collection_with_index, doc_id=doc_id, metadata=doc_metadata, save=save_on_each_update)
             self.doc_ids_to_file_names[doc_id] = str(input_path)
 
         self._export_index()
@@ -330,6 +331,7 @@ class ColPaliModel:
         store_collection_with_index: bool,
         doc_id: Optional[Union[int, List[int]]] = None,
         metadata: Optional[List[Dict[str, Union[str, int]]]] = None,
+        save: bool = True,
     ) -> Dict[int, str]:
         if self.index_name is None:
             raise ValueError("No index loaded. Use index() to create or load an index first.")
@@ -371,8 +373,8 @@ class ColPaliModel:
                 self.doc_ids_to_file_names[current_doc_id] = "In-memory Image"
             else:
                 raise ValueError(f"Unsupported input type: {type(item)}")
-
-        self._export_index()
+        if save:
+            self._export_index()
         return self.doc_ids_to_file_names
 
     def _process_directory(self, directory: Path, store_collection_with_index: bool, base_doc_id: int, metadata: Optional[Dict[str, Union[str, int]]]):
