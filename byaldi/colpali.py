@@ -322,7 +322,7 @@ class ColPaliModel:
                 batch_doc_ids.append(doc_id)
                 batch_metadata.append(doc_metadata)
                 if len(batch) == batch_size or i == len(items) - 1:
-                    self.add_to_index(batch, store_collection_with_index, doc_ids=batch_doc_ids, metadata=batch_metadata, save=save_on_each_update)
+                    self.add_to_index(batch, store_collection_with_index, doc_id=batch_doc_ids, metadata=batch_metadata, save=save_on_each_update)
                     for j, item in enumerate(batch):
                         self.doc_ids_to_file_names[batch_doc_ids[j]] = str(item)
 
