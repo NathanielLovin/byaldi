@@ -312,7 +312,7 @@ class ColPaliModel:
                 print(f"Indexing file: {item}")
                 doc_id = doc_ids[i] if doc_ids else self.highest_doc_id + 1
                 doc_metadata = metadata[doc_id] if metadata else None
-                self.add_to_index(item, store_collection_with_index, doc_id=doc_id, metadata=doc_metadata)
+                self.add_to_index(item, store_collection_with_index, doc_id=doc_id, metadata=doc_metadata, save=save_on_each_update)
                 self.doc_ids_to_file_names[doc_id] = str(item)
         else:
             if metadata is not None and len(metadata) != 1:
