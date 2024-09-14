@@ -96,6 +96,7 @@ class RAGMultiModalModel:
         max_image_width: Optional[int] = None,
         max_image_height: Optional[int] = None,
         save_on_each_update: bool = True,
+        batch_size: int = 1,
         **kwargs,
     ):
         """Build an index from input documents.
@@ -124,6 +125,7 @@ class RAGMultiModalModel:
             max_image_width=max_image_width,
             max_image_height=max_image_height,
             save_on_each_update=save_on_each_update,
+            batch_size=batch_size,
             **kwargs,
         )
 

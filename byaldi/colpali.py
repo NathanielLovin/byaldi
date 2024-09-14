@@ -263,6 +263,7 @@ class ColPaliModel:
         max_image_width: Optional[int] = None,
         max_image_height: Optional[int] = None,
         save_on_each_update: bool = True,
+        batch_size: int = 1,
     ) -> Dict[int, str]:
         if (
             self.index_name is not None
@@ -310,12 +311,25 @@ class ColPaliModel:
                 raise ValueError(
                     f"Number of metadata entries ({len(metadata)}) does not match number of documents ({len(items)})"
                 )
+            batch = []
+            batch_doc_ids = []
+            batch_metadata = []
             for i, item in enumerate(items):
                 print(f"Indexing file: {item}")
                 doc_id = doc_ids[i] if doc_ids else self.highest_doc_id + 1
                 doc_metadata = metadata[doc_id] if metadata else None
-                self.add_to_index(item, store_collection_with_index, doc_id=doc_id, metadata=doc_metadata, save=save_on_each_update)
-                self.doc_ids_to_file_names[doc_id] = str(item)
+                batch.append(item)
+                batch_doc_ids.append(doc_id)
+                batch_metadata.append(doc_metadata)
+                if len(batch) == batch_size or i == len(items) - 1:
+                    self.add_to_index(batch, store_collection_with_index, doc_ids=batch_doc_ids, metadata=batch_metadata, save=save_on_each_update)
+                    for j, item in enumerate(batch):
+                        self.doc_ids_to_file_names[batch_doc_ids[j]] = str(item)
+
+                    # Clear batch data
+                    batch.clear()
+                    batch_doc_ids.clear()
+                    batch_metadata.clear()
         else:
             if metadata is not None and len(metadata) != 1:
                 raise ValueError("For a single document, metadata should be a list with one dictionary")
@@ -354,27 +368,34 @@ class ColPaliModel:
             raise ValueError(f"Number of metadata entries ({len(metadata)}) does not match number of input items ({len(input_items)})")
 
         # Process each input item
-        for i, item in enumerate(input_items):
-            current_doc_id = doc_ids[i] if doc_ids else self.highest_doc_id + 1 + i
-            current_metadata = metadata[i] if metadata else None
+        if len(input_items) > 1:
+            current_doc_ids = doc_ids if doc_ids else [self.highest_doc_id + 1 + i for i in range(len(input_items))]
+            current_metadata = metadata if metadata else None
+            self.highest_doc_id = max(self.highest_doc_id, current_doc_ids[-1])
+            item_paths = [Path(item) for item in input_items]
+            self._process_and_add_to_index_batch(item_paths, store_collection_with_index, current_doc_ids, current_metadata)
+        else:
+            for i, item in enumerate(input_items):
+                current_doc_id = doc_ids[i] if doc_ids else self.highest_doc_id + 1 + i
+                current_metadata = metadata[i] if metadata else None
 
-            if current_doc_id in self.doc_ids:
-                raise ValueError(f"Document ID {current_doc_id} already exists in the index")
+                if current_doc_id in self.doc_ids:
+                    raise ValueError(f"Document ID {current_doc_id} already exists in the index")
 
-            self.highest_doc_id = max(self.highest_doc_id, current_doc_id)
+                self.highest_doc_id = max(self.highest_doc_id, current_doc_id)
 
-            if isinstance(item, (str, Path)):
-                item_path = Path(item)
-                if item_path.is_dir():
-                    self._process_directory(item_path, store_collection_with_index, current_doc_id, current_metadata)
+                if isinstance(item, (str, Path)):
+                    item_path = Path(item)
+                    if item_path.is_dir():
+                        self._process_directory(item_path, store_collection_with_index, current_doc_id, current_metadata)
+                    else:
+                        self._process_and_add_to_index(item_path, store_collection_with_index, current_doc_id, current_metadata)
+                    self.doc_ids_to_file_names[current_doc_id] = str(item_path)
+                elif isinstance(item, Image.Image):
+                    self._process_and_add_to_index(item, store_collection_with_index, current_doc_id, current_metadata)
+                    self.doc_ids_to_file_names[current_doc_id] = "In-memory Image"
                 else:
-                    self._process_and_add_to_index(item_path, store_collection_with_index, current_doc_id, current_metadata)
-                self.doc_ids_to_file_names[current_doc_id] = str(item_path)
-            elif isinstance(item, Image.Image):
-                self._process_and_add_to_index(item, store_collection_with_index, current_doc_id, current_metadata)
-                self.doc_ids_to_file_names[current_doc_id] = "In-memory Image"
-            else:
-                raise ValueError(f"Unsupported input type: {type(item)}")
+                    raise ValueError(f"Unsupported input type: {type(item)}")
         if save:
             self._export_index()
         return self.doc_ids_to_file_names
@@ -408,6 +429,25 @@ class ColPaliModel:
             self._add_to_index(item, store_collection_with_index, doc_id, metadata=metadata)
         else:
             raise ValueError(f"Unsupported input type: {type(item)}")
+        
+    def _process_and_add_to_index_batch(
+        self,
+        items: List[Path],
+        store_collection_with_index: bool,
+        doc_ids: List[int],
+        metadata: Optional[List[Dict[str, Union[str, int]]]] = None,
+    ):
+        images = []
+        for item in items:
+            if item.suffix.lower() == ".pdf":
+                raise ValueError("Batch PDF not currently supported")
+            elif item.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
+                image = Image.open(item)
+                images.append(image)
+            else:
+                raise ValueError(f"Unsupported input type: {item.suffix}")
+
+        self._add_to_index_batch(images, store_collection_with_index, doc_ids, metadata)
 
     def _add_to_index(
         self,
@@ -431,6 +471,8 @@ class ColPaliModel:
         embed_id = len(self.indexed_embeddings)
         self.indexed_embeddings.extend(list(torch.unbind(embedding.to("cpu"))))
         self.embed_id_to_doc_id[embed_id] = {"doc_id": doc_id, "page_id": int(page_id)}
+        
+
 
         # Update highest_doc_id
         self.highest_doc_id = max(self.highest_doc_id, int(doc_id) if isinstance(doc_id, int) else self.highest_doc_id)
@@ -470,6 +512,74 @@ class ColPaliModel:
 
         if self.verbose > 0:
             print(f"Added page {page_id} of document {doc_id} to index.")
+
+    def _add_to_index_batch(
+        self,
+        images: List[Image.Image],
+        store_collection_with_index: bool,
+        doc_ids: List[int],
+        metadata: Optional[List[Dict[str, Union[str, int]]]] = None,
+    ):
+        for doc_id in doc_ids:
+            if any(entry["doc_id"] == doc_id and entry["page_id"] == 1 for entry in self.embed_id_to_doc_id.values()):
+                raise ValueError(f"Document ID {doc_id} with page ID {1} already exists in the index")
+
+        processed_images = process_images(self.processor, images)
+
+        # Generate embedding
+        with torch.no_grad():
+            processed_images = {k: v.to(self.device) for k, v in processed_images.items()}
+            embedding = self.model(**processed_images)
+
+        # Add to index
+        # embed_id = len(self.indexed_embeddings)
+        # self.indexed_embeddings.extend(list(torch.unbind(embedding.to("cpu"))))
+        # self.embed_id_to_doc_id[embed_id] = {"doc_id": doc_id, "page_id": int(page_id)}
+        for i, emb in enumerate(torch.unbind(embedding.to("cpu"))):
+            embed_id = len(self.indexed_embeddings)
+            self.indexed_embeddings.append(emb)
+            self.embed_id_to_doc_id[embed_id] = {"doc_id": doc_ids[i], "page_id": 1}
+
+        # Update highest_doc_id
+        self.highest_doc_id = max(self.highest_doc_id, int(doc_ids[-1]) if isinstance(doc_ids[-1], int) else self.highest_doc_id)
+
+        # Not supported yet
+        # if store_collection_with_index:
+        #     import base64
+        #     import io
+
+        #     # Resize image while maintaining aspect ratio
+        #     if self.max_image_width and self.max_image_height:
+        #         img_width, img_height = image.size
+        #         aspect_ratio = img_width / img_height
+        #         if img_width > self.max_image_width:
+        #             new_width = self.max_image_width
+        #             new_height = int(new_width / aspect_ratio)
+        #         else:
+        #             new_width = img_width
+        #             new_height = img_height
+        #         if new_height > self.max_image_height:
+        #             new_height = self.max_image_height
+        #             new_width = int(new_height * aspect_ratio)
+        #         if self.verbose > 2:
+        #             print(f"Resizing image to {new_width}x{new_height}" ,
+        #                   f"(aspect ratio {aspect_ratio:.2f}, original size {img_width}x{img_height},"
+        #                   f"compression {new_width/img_width * new_height/img_height:.2f})")
+        #         image = image.resize((new_width, new_height), Image.LANCZOS)
+
+        #     buffered = io.BytesIO()
+        #     image.save(buffered, format="PNG")
+        #     img_str = base64.b64encode(buffered.getvalue()).decode()
+
+        #     self.collection[int(embed_id)] = img_str
+
+        # Add metadata
+        if metadata:
+            for i, doc_id in enumerate(doc_ids):
+                self.doc_id_to_metadata[doc_id] = metadata[i]
+
+        if self.verbose > 0:
+            print(f"Added documents {doc_ids[0]}-{doc_ids[-1]} to index.")
 
     def remove_from_index(self):
         raise NotImplementedError("This method is not implemented yet.")
