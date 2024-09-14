@@ -317,6 +317,7 @@ class ColPaliModel:
             for i, item in enumerate(items):
                 print(f"Indexing file: {item}")
                 doc_id = doc_ids[i] if doc_ids else self.highest_doc_id + 1
+                self.highest_doc_id = max(self.highest_doc_id, doc_id)
                 doc_metadata = metadata[doc_id] if metadata else None
                 batch.append(item)
                 batch_doc_ids.append(doc_id)
