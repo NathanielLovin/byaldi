@@ -29,7 +29,7 @@ dependencies = [
 "pdf2image",
 "srsly",
 "colpali-engine==0.2.2",
-"mteb==1.6.35",
+"mteb==1.6.36",
 ]
 
 
