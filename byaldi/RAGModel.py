@@ -104,6 +104,8 @@ class RAGMultiModalModel:
         ] = None,
         max_image_width: Optional[int] = None,
         max_image_height: Optional[int] = None,
+        save_on_each_update: bool = True,
+        batch_size: int = 1,
         **kwargs,
     ):
         """Build an index from input documents.
@@ -114,6 +116,7 @@ class RAGMultiModalModel:
             doc_ids (Optional[List[Union[str, int]]]): List of document IDs.
             store_collection_with_index (bool): Whether to store the collection with the index.
             overwrite (bool): Whether to overwrite an existing index with the same name.
+            save_on_each_update (bool): Whether to save the index on after each document is added. Default is True.
             metadata (Optional[Union[Dict[Union[str, int], Dict[str, Union[str, int]]], List[Dict[str, Union[str, int]]]]]):
                 Metadata for the documents. Can be a dictionary mapping doc_ids to metadata dictionaries,
                 or a list of metadata dictionaries (one for each document).
@@ -130,6 +133,8 @@ class RAGMultiModalModel:
             metadata=metadata,
             max_image_width=max_image_width,
             max_image_height=max_image_height,
+            save_on_each_update=save_on_each_update,
+            batch_size=batch_size,
             **kwargs,
         )
 
